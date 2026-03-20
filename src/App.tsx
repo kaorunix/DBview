@@ -87,6 +87,7 @@ function App() {
 
   async function loadTableData(schema: string, name: string, page: number) {
     setDataLoading(true);
+    setStatus({ message: "", isError: false });
     try {
       const data = await invoke<TableData>("fetch_table_data", {
         schema,
