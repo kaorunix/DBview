@@ -345,7 +345,7 @@ function App() {
                   Excel
                 </button>
                 <button
-                  onClick={() => window.print()}
+                  onClick={() => invoke("print_window")}
                   title="印刷 / PDF として保存"
                 >
                   印刷

@@ -238,6 +238,13 @@ async fn fetch_table_data(
     })
 }
 
+/// WebView の印刷ダイアログを開く。
+/// JS の window.print() は macOS WKWebView で無効なため Rust 側から呼び出す。
+#[tauri::command]
+fn print_window(window: tauri::WebviewWindow) -> Result<(), String> {
+    window.print().map_err(|e| e.to_string())
+}
+
 /// フロントエンドから受け取ったバイト列をダウンロードフォルダに保存する。
 /// macOS の WKWebView は Blob URL ダウンロードをサポートしないため、
 /// Rust 側でファイルを書き込んで保存パスを返す。
@@ -358,7 +365,8 @@ pub fn run() {
             list_tables,
             fetch_table_data,
             fetch_all_rows,
-            save_file
+            save_file,
+            print_window
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
