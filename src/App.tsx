@@ -119,17 +119,13 @@ function App() {
     await loadTableData(selectedTable.schema, selectedTable.name, newPage);
   }
 
-  // Blob URL を生成してファイルダウンロードをトリガーする
-  function triggerDownload(blob: Blob, filename: string) {
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = filename;
-    a.click();
-    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  // macOS の WKWebView は Blob URL ダウンロードを拒否するため、
+  // バイト列を Rust に渡してダウンロードフォルダへ直接保存する
+  async function saveFile(filename: string, data: Uint8Array): Promise<string> {
+    return invoke<string>("save_file", { filename, data: Array.from(data) });
   }
 
-  // 全行を取得してCSVとしてダウンロード（BOM付き UTF-8 でExcelも開ける）
+  // 全行を取得してCSVとして保存（BOM付き UTF-8 でExcelでも文字化けしない）
   async function handleExportCsv() {
     if (!selectedTable) return;
     setExporting(true);
@@ -143,9 +139,11 @@ function App() {
       const csv = rows
         .map((row) => row.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(","))
         .join("\r\n");
-      const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8;" });
-      triggerDownload(blob, `${selectedTable.name}.csv`);
-      setStatus({ message: `CSV エクスポート完了（${data.rows.length.toLocaleString()} 件）`, isError: false });
+      // UTF-8 BOM (EF BB BF) を先頭に付与
+      const encoded = new TextEncoder().encode(csv);
+      const withBom = new Uint8Array([0xef, 0xbb, 0xbf, ...encoded]);
+      const path = await saveFile(`${selectedTable.name}.csv`, withBom);
+      setStatus({ message: `CSV 保存完了（${data.rows.length.toLocaleString()} 件）→ ${path}`, isError: false });
     } catch (err) {
       setStatus({ message: String(err), isError: true });
     } finally {
@@ -153,7 +151,7 @@ function App() {
     }
   }
 
-  // 全行を取得して Excel（.xlsx）としてダウンロード
+  // 全行を取得して Excel（.xlsx）として保存
   async function handleExportExcel() {
     if (!selectedTable) return;
     setExporting(true);
@@ -168,12 +166,9 @@ function App() {
       const wb = XLSX.utils.book_new();
       // Excel のシート名は 31 文字以内
       XLSX.utils.book_append_sheet(wb, ws, selectedTable.name.slice(0, 31));
-      const buf = XLSX.write(wb, { type: "array", bookType: "xlsx" });
-      const blob = new Blob([buf], {
-        type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-      });
-      triggerDownload(blob, `${selectedTable.name}.xlsx`);
-      setStatus({ message: `Excel エクスポート完了（${data.rows.length.toLocaleString()} 件）`, isError: false });
+      const buf: number[] = XLSX.write(wb, { type: "array", bookType: "xlsx" });
+      const path = await saveFile(`${selectedTable.name}.xlsx`, new Uint8Array(buf));
+      setStatus({ message: `Excel 保存完了（${data.rows.length.toLocaleString()} 件）→ ${path}`, isError: false });
     } catch (err) {
       setStatus({ message: String(err), isError: true });
     } finally {

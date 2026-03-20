@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
-use tauri::State;
+use tauri::{Manager, State};
 use tiberius::{AuthMethod, Client, Config, EncryptionLevel};
 use tokio::net::TcpStream;
 use tokio::sync::Mutex;
@@ -238,6 +238,25 @@ async fn fetch_table_data(
     })
 }
 
+/// フロントエンドから受け取ったバイト列をダウンロードフォルダに保存する。
+/// macOS の WKWebView は Blob URL ダウンロードをサポートしないため、
+/// Rust 側でファイルを書き込んで保存パスを返す。
+#[tauri::command]
+async fn save_file(
+    app: tauri::AppHandle,
+    filename: String,
+    data: Vec<u8>,
+) -> Result<String, String> {
+    let download_dir = app
+        .path()
+        .download_dir()
+        .map_err(|e| format!("ダウンロードフォルダの取得に失敗: {}", e))?;
+    let file_path = download_dir.join(&filename);
+    std::fs::write(&file_path, &data)
+        .map_err(|e| format!("ファイル保存エラー: {}", e))?;
+    Ok(file_path.to_string_lossy().to_string())
+}
+
 /// エクスポート用にテーブルの全行を取得する（最大 50,000 件）。
 /// ページネーションなし。CSV / Excel 生成のためにフロントエンドへ返す。
 #[tauri::command]
@@ -338,7 +357,8 @@ pub fn run() {
             disconnect_db,
             list_tables,
             fetch_table_data,
-            fetch_all_rows
+            fetch_all_rows,
+            save_file
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
