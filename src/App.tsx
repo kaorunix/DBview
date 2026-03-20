@@ -92,7 +92,7 @@ function App() {
         schema,
         table: name,
         page,
-        page_size: PAGE_SIZE,
+        pageSize: PAGE_SIZE,
       });
       setTableData(data);
     } catch (err) {
