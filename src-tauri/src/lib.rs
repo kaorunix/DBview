@@ -238,6 +238,96 @@ async fn fetch_table_data(
     })
 }
 
+/// エクスポート用にテーブルの全行を取得する（最大 50,000 件）。
+/// ページネーションなし。CSV / Excel 生成のためにフロントエンドへ返す。
+#[tauri::command]
+async fn fetch_all_rows(
+    schema: String,
+    table: String,
+    state: State<'_, DbState>,
+) -> Result<TableData, String> {
+    const MAX_ROWS: i64 = 50_000;
+
+    let mut conn = state.0.lock().await;
+    let client = conn.as_mut().ok_or("DBに接続されていません")?;
+
+    // 列名と型を取得
+    let col_rows = client
+        .query(
+            "SELECT COLUMN_NAME, DATA_TYPE \
+             FROM INFORMATION_SCHEMA.COLUMNS \
+             WHERE TABLE_SCHEMA = @P1 AND TABLE_NAME = @P2 \
+             ORDER BY ORDINAL_POSITION",
+            &[&schema.as_str(), &table.as_str()],
+        )
+        .await
+        .map_err(|e| format!("列情報取得エラー: {}", e))?
+        .into_first_result()
+        .await
+        .map_err(|e| e.to_string())?;
+
+    let columns: Vec<(String, String)> = col_rows
+        .iter()
+        .map(|row| {
+            let name = row.get::<&str, _>(0).unwrap_or("").to_string();
+            let dtype = row.get::<&str, _>(1).unwrap_or("").to_string();
+            (name, dtype)
+        })
+        .collect();
+
+    let q_schema = quote_ident(&schema);
+    let q_table = quote_ident(&table);
+
+    let binary_types = ["binary", "varbinary", "image", "timestamp", "rowversion"];
+    let col_selects: Vec<String> = columns
+        .iter()
+        .map(|(name, dtype)| {
+            let q_name = quote_ident(name);
+            if binary_types.contains(&dtype.to_lowercase().as_str()) {
+                format!("N'(binary)' AS {}", q_name)
+            } else {
+                format!("TRY_CONVERT(NVARCHAR(MAX), {}) AS {}", q_name, q_name)
+            }
+        })
+        .collect();
+
+    // TOP N で件数を制限（ORDER BY は不要なので省略）
+    let data_sql = format!(
+        "SELECT TOP {} {} FROM {}.{}",
+        MAX_ROWS,
+        col_selects.join(", "),
+        q_schema,
+        q_table,
+    );
+
+    let data_rows = client
+        .query(data_sql.as_str(), &[])
+        .await
+        .map_err(|e| format!("データ取得エラー: {}", e))?
+        .into_first_result()
+        .await
+        .map_err(|e| e.to_string())?;
+
+    let column_names: Vec<String> = columns.into_iter().map(|(name, _)| name).collect();
+    let n_cols = column_names.len();
+    let total_rows = data_rows.len() as i64;
+
+    let rows: Vec<Vec<Option<String>>> = data_rows
+        .iter()
+        .map(|row| {
+            (0..n_cols)
+                .map(|i| row.get::<&str, _>(i).map(|s| s.to_string()))
+                .collect()
+        })
+        .collect();
+
+    Ok(TableData {
+        columns: column_names,
+        rows,
+        total_rows,
+    })
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -247,7 +337,8 @@ pub fn run() {
             connect_db,
             disconnect_db,
             list_tables,
-            fetch_table_data
+            fetch_table_data,
+            fetch_all_rows
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

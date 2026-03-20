@@ -76,6 +76,33 @@
   color: #888;
 }
 
+.export-buttons {
+  display: flex;
+  gap: 4px;
+  margin-left: auto;
+}
+
+.export-buttons button {
+  padding: 3px 10px;
+  font-size: 12px;
+  font-family: inherit;
+  border: 1px solid #ccc;
+  border-radius: 3px;
+  background: #fff;
+  cursor: pointer;
+  color: #333;
+}
+
+.export-buttons button:hover:not(:disabled) {
+  background: #e3f2fd;
+  border-color: #90caf9;
+}
+
+.export-buttons button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
 .data-grid-wrapper {
   flex: 1;
   overflow: auto;
@@ -484,4 +511,28 @@
   .pagination button { background: #3c3c3c; border-color: #555; color: #ccc; }
   .pagination button:hover:not(:disabled) { background: #1e3040; border-color: #4a7aa0; }
   .page-info { color: #888; }
+
+  .export-buttons button { background: #3c3c3c; border-color: #555; color: #ccc; }
+  .export-buttons button:hover:not(:disabled) { background: #1e3040; border-color: #4a7aa0; }
+}
+
+/* ===== 印刷 / PDF ===== */
+@media print {
+  /* サイドバー・ツールバー・ページネーションを非表示 */
+  .sidebar,
+  .export-buttons,
+  .pagination,
+  .statusbar { display: none !important; }
+
+  /* レイアウトをリセットしてメインエリアを全幅に */
+  .app { display: block; }
+  .main { overflow: visible; }
+  .data-view { overflow: visible; }
+  .data-grid-wrapper { overflow: visible; }
+
+  /* テーブルを印刷向けに調整 */
+  .data-grid { font-size: 10px; }
+  .data-grid th { background: #eee !important; color: #000 !important; }
+  .data-grid td { color: #000 !important; }
+  .data-grid tr:hover td { background: none !important; }
 }

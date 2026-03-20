@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import * as XLSX from "xlsx";
 import "./App.css";
 
 const PAGE_SIZE = 100;
@@ -54,6 +55,7 @@ function App() {
   const [tableData, setTableData] = useState<TableData | null>(null);
   const [dataPage, setDataPage] = useState(0);
   const [dataLoading, setDataLoading] = useState(false);
+  const [exporting, setExporting] = useState(false);
 
   function updateParam<K extends keyof ConnectParams>(key: K, value: ConnectParams[K]) {
     setParams((prev) => ({ ...prev, [key]: value }));
@@ -115,6 +117,68 @@ function App() {
     if (!selectedTable) return;
     setDataPage(newPage);
     await loadTableData(selectedTable.schema, selectedTable.name, newPage);
+  }
+
+  // Blob URL を生成してファイルダウンロードをトリガーする
+  function triggerDownload(blob: Blob, filename: string) {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }
+
+  // 全行を取得してCSVとしてダウンロード（BOM付き UTF-8 でExcelも開ける）
+  async function handleExportCsv() {
+    if (!selectedTable) return;
+    setExporting(true);
+    setStatus({ message: "CSV 出力中…", isError: false });
+    try {
+      const data = await invoke<TableData>("fetch_all_rows", {
+        schema: selectedTable.schema,
+        table: selectedTable.name,
+      });
+      const rows = [data.columns, ...data.rows.map((r) => r.map((c) => c ?? ""))];
+      const csv = rows
+        .map((row) => row.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(","))
+        .join("\r\n");
+      const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8;" });
+      triggerDownload(blob, `${selectedTable.name}.csv`);
+      setStatus({ message: `CSV エクスポート完了（${data.rows.length.toLocaleString()} 件）`, isError: false });
+    } catch (err) {
+      setStatus({ message: String(err), isError: true });
+    } finally {
+      setExporting(false);
+    }
+  }
+
+  // 全行を取得して Excel（.xlsx）としてダウンロード
+  async function handleExportExcel() {
+    if (!selectedTable) return;
+    setExporting(true);
+    setStatus({ message: "Excel 出力中…", isError: false });
+    try {
+      const data = await invoke<TableData>("fetch_all_rows", {
+        schema: selectedTable.schema,
+        table: selectedTable.name,
+      });
+      const aoa = [data.columns, ...data.rows.map((r) => r.map((c) => c ?? ""))];
+      const ws = XLSX.utils.aoa_to_sheet(aoa);
+      const wb = XLSX.utils.book_new();
+      // Excel のシート名は 31 文字以内
+      XLSX.utils.book_append_sheet(wb, ws, selectedTable.name.slice(0, 31));
+      const buf = XLSX.write(wb, { type: "array", bookType: "xlsx" });
+      const blob = new Blob([buf], {
+        type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      });
+      triggerDownload(blob, `${selectedTable.name}.xlsx`);
+      setStatus({ message: `Excel エクスポート完了（${data.rows.length.toLocaleString()} 件）`, isError: false });
+    } catch (err) {
+      setStatus({ message: String(err), isError: true });
+    } finally {
+      setExporting(false);
+    }
   }
 
   // テーブルをスキーマごとにグループ化
@@ -270,6 +334,28 @@ function App() {
               <span className="data-row-count">
                 {tableData.total_rows.toLocaleString()} 件
               </span>
+              <div className="export-buttons">
+                <button
+                  onClick={handleExportCsv}
+                  disabled={exporting || dataLoading}
+                  title="CSV ファイルとしてダウンロード（最大 50,000 件）"
+                >
+                  CSV
+                </button>
+                <button
+                  onClick={handleExportExcel}
+                  disabled={exporting || dataLoading}
+                  title="Excel ファイルとしてダウンロード（最大 50,000 件）"
+                >
+                  Excel
+                </button>
+                <button
+                  onClick={() => window.print()}
+                  title="印刷 / PDF として保存"
+                >
+                  印刷
+                </button>
+              </div>
             </div>
 
             <div className="data-grid-wrapper">
