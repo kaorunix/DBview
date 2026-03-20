@@ -2,6 +2,8 @@ import { useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import "./App.css";
 
+const PAGE_SIZE = 100;
+
 interface ConnectParams {
   host: string;
   port: number;
@@ -16,6 +18,17 @@ interface TableInfo {
   schema: string;
   name: string;
   table_type: string;
+}
+
+interface SelectedTable {
+  schema: string;
+  name: string;
+}
+
+interface TableData {
+  columns: string[];
+  rows: (string | null)[][];
+  total_rows: number;
 }
 
 const DEFAULT_PARAMS: ConnectParams = {
@@ -37,12 +50,16 @@ function App() {
   });
   const [tables, setTables] = useState<TableInfo[]>([]);
   const [params, setParams] = useState<ConnectParams>(DEFAULT_PARAMS);
+  const [selectedTable, setSelectedTable] = useState<SelectedTable | null>(null);
+  const [tableData, setTableData] = useState<TableData | null>(null);
+  const [dataPage, setDataPage] = useState(0);
+  const [dataLoading, setDataLoading] = useState(false);
 
   function updateParam<K extends keyof ConnectParams>(key: K, value: ConnectParams[K]) {
     setParams((prev) => ({ ...prev, [key]: value }));
   }
 
-  async function handleConnect(e: React.FormEvent) {
+  async function handleConnect(e: { preventDefault(): void }) {
     e.preventDefault();
     setLoading(true);
     setStatus({ message: "", isError: false });
@@ -63,7 +80,40 @@ function App() {
     await invoke("disconnect_db");
     setConnected(false);
     setTables([]);
+    setSelectedTable(null);
+    setTableData(null);
     setStatus({ message: "切断しました", isError: false });
+  }
+
+  async function loadTableData(schema: string, name: string, page: number) {
+    setDataLoading(true);
+    try {
+      const data = await invoke<TableData>("fetch_table_data", {
+        schema,
+        table: name,
+        page,
+        page_size: PAGE_SIZE,
+      });
+      setTableData(data);
+    } catch (err) {
+      setStatus({ message: String(err), isError: true });
+      setTableData(null);
+    } finally {
+      setDataLoading(false);
+    }
+  }
+
+  async function handleSelectTable(schema: string, name: string) {
+    setSelectedTable({ schema, name });
+    setDataPage(0);
+    setTableData(null);
+    await loadTableData(schema, name, 0);
+  }
+
+  async function changePage(newPage: number) {
+    if (!selectedTable) return;
+    setDataPage(newPage);
+    await loadTableData(selectedTable.schema, selectedTable.name, newPage);
   }
 
   // テーブルをスキーマごとにグループ化
@@ -71,6 +121,8 @@ function App() {
     (acc[t.schema] ??= []).push(t);
     return acc;
   }, {});
+
+  const totalPages = tableData ? Math.max(1, Math.ceil(tableData.total_rows / PAGE_SIZE)) : 1;
 
   return (
     <div className="app">
@@ -113,7 +165,7 @@ function App() {
               <input
                 value={params.username}
                 onChange={(e) => updateParam("username", e.target.value)}
-                placeholder="空白で Windows 認証"
+                placeholder="必須"
               />
             </label>
 
@@ -170,7 +222,18 @@ function App() {
                   <div className="schema-name">{schema}</div>
                   <ul>
                     {items.map((t) => (
-                      <li key={t.name} className={t.table_type === "VIEW" ? "is-view" : ""}>
+                      <li
+                        key={t.name}
+                        className={[
+                          t.table_type === "VIEW" ? "is-view" : "",
+                          selectedTable?.schema === schema && selectedTable?.name === t.name
+                            ? "selected"
+                            : "",
+                        ]
+                          .join(" ")
+                          .trim()}
+                        onClick={() => handleSelectTable(schema, t.name)}
+                      >
                         <span className="table-name">{t.name}</span>
                         {t.table_type === "VIEW" && <span className="badge">VIEW</span>}
                       </li>
@@ -185,11 +248,81 @@ function App() {
 
       {/* メインエリア */}
       <main className="main">
-        {connected ? (
-          <p className="placeholder">← テーブルを選択するとデータを表示します（Phase 2）</p>
-        ) : (
-          <p className="placeholder">左のフォームから SQL Server に接続してください</p>
-        )}
+        {!connected || !selectedTable ? (
+          <div className="main-centered">
+            <p className="placeholder">
+              {!connected
+                ? "左のフォームから SQL Server に接続してください"
+                : "← テーブルを選択するとデータを表示します"}
+            </p>
+          </div>
+        ) : dataLoading ? (
+          <div className="main-centered">
+            <p className="placeholder">読み込み中…</p>
+          </div>
+        ) : tableData ? (
+          <div className="data-view">
+            <div className="data-header">
+              <span className="data-table-name">
+                [{selectedTable.schema}].[{selectedTable.name}]
+              </span>
+              <span className="data-row-count">
+                {tableData.total_rows.toLocaleString()} 件
+              </span>
+            </div>
+
+            <div className="data-grid-wrapper">
+              <table className="data-grid">
+                <thead>
+                  <tr>
+                    {tableData.columns.map((col) => (
+                      <th key={col}>{col}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {tableData.rows.length === 0 ? (
+                    <tr>
+                      <td colSpan={tableData.columns.length} className="empty-rows">
+                        データがありません
+                      </td>
+                    </tr>
+                  ) : (
+                    tableData.rows.map((row, ri) => (
+                      <tr key={ri}>
+                        {row.map((cell, ci) => (
+                          <td key={ci} className={cell === null ? "cell-null" : ""}>
+                            {cell === null ? "NULL" : cell}
+                          </td>
+                        ))}
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+
+            <div className="pagination">
+              <button disabled={dataPage === 0} onClick={() => changePage(dataPage - 1)}>
+                ‹ 前へ
+              </button>
+              <span className="page-info">
+                {tableData.total_rows > 0
+                  ? `${dataPage + 1} / ${totalPages} ページ（${(dataPage * PAGE_SIZE + 1).toLocaleString()}–${Math.min(
+                      (dataPage + 1) * PAGE_SIZE,
+                      tableData.total_rows
+                    ).toLocaleString()} 件目）`
+                  : "0 件"}
+              </span>
+              <button
+                disabled={(dataPage + 1) * PAGE_SIZE >= tableData.total_rows}
+                onClick={() => changePage(dataPage + 1)}
+              >
+                次へ ›
+              </button>
+            </div>
+          </div>
+        ) : null}
       </main>
 
       {/* ステータスバー */}

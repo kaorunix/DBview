@@ -33,10 +33,141 @@
 
 .main {
   grid-row: 1;
-  overflow: auto;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.main-centered {
+  flex: 1;
   display: flex;
   align-items: center;
   justify-content: center;
+}
+
+/* ===== データビュー ===== */
+.data-view {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  min-height: 0;
+}
+
+.data-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 12px;
+  border-bottom: 1px solid #e0e0e0;
+  background: #fafafa;
+  flex-shrink: 0;
+}
+
+.data-table-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: #333;
+  font-family: "Consolas", "SFMono-Regular", monospace;
+}
+
+.data-row-count {
+  font-size: 12px;
+  color: #888;
+}
+
+.data-grid-wrapper {
+  flex: 1;
+  overflow: auto;
+  min-height: 0;
+}
+
+.data-grid {
+  border-collapse: collapse;
+  min-width: 100%;
+  font-size: 12px;
+}
+
+.data-grid th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: #f0f4f8;
+  padding: 6px 10px;
+  text-align: left;
+  border-bottom: 2px solid #d0d8e0;
+  border-right: 1px solid #d8dfe8;
+  white-space: nowrap;
+  font-weight: 600;
+  color: #444;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+
+.data-grid td {
+  padding: 4px 10px;
+  border-bottom: 1px solid #f0f0f0;
+  border-right: 1px solid #f5f5f5;
+  white-space: nowrap;
+  max-width: 300px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: #222;
+}
+
+.data-grid tr:hover td {
+  background: #f0f7ff;
+}
+
+.cell-null {
+  color: #bbb !important;
+  font-style: italic;
+}
+
+.empty-rows {
+  text-align: center;
+  padding: 24px;
+  color: #999;
+}
+
+/* ===== ページネーション ===== */
+.pagination {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  border-top: 1px solid #e0e0e0;
+  background: #fafafa;
+  flex-shrink: 0;
+}
+
+.pagination button {
+  padding: 3px 10px;
+  font-size: 12px;
+  font-family: inherit;
+  border: 1px solid #ccc;
+  border-radius: 3px;
+  background: #fff;
+  cursor: pointer;
+  color: #333;
+}
+
+.pagination button:hover:not(:disabled) {
+  background: #e3f2fd;
+  border-color: #90caf9;
+}
+
+.pagination button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.page-info {
+  flex: 1;
+  text-align: center;
+  font-size: 12px;
+  color: #666;
 }
 
 .statusbar {
@@ -218,6 +349,19 @@
   background: #e3f2fd;
 }
 
+.table-list li.selected {
+  background: #1976d2;
+}
+
+.table-list li.selected .table-name {
+  color: #fff;
+}
+
+.table-list li.selected .badge {
+  background: rgba(255, 255, 255, 0.2);
+  color: #fff;
+}
+
 .table-name {
   flex: 1;
   font-size: 12px;
@@ -313,4 +457,31 @@
 
   .statusbar { background: #1b3a1b; color: #81c784; border-top-color: #2e5a2e; }
   .statusbar--error { background: #3a1b1b; color: #ef9a9a; border-top-color: #5a2e2e; }
+
+  .table-list li.selected { background: #1565c0; }
+
+  .data-header { background: #252526; border-bottom-color: #3c3c3c; }
+  .data-table-name { color: #ddd; }
+  .data-row-count { color: #777; }
+
+  .data-grid th {
+    background: #2a2d30;
+    border-bottom-color: #444;
+    border-right-color: #3a3a3a;
+    color: #aaa;
+  }
+
+  .data-grid td {
+    border-bottom-color: #2d2d2d;
+    border-right-color: #2a2a2a;
+    color: #ccc;
+  }
+
+  .data-grid tr:hover td { background: #1e3040; }
+  .cell-null { color: #555 !important; }
+
+  .pagination { background: #252526; border-top-color: #3c3c3c; }
+  .pagination button { background: #3c3c3c; border-color: #555; color: #ccc; }
+  .pagination button:hover:not(:disabled) { background: #1e3040; border-color: #4a7aa0; }
+  .page-info { color: #888; }
 }
