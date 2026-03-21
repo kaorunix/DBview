@@ -5,7 +5,7 @@
   "windows": ["main"],
   "permissions": [
     "core:default",
-    "core:window:allow-print",
+    "core:webview:allow-print",
     "opener:default"
   ]
 }
