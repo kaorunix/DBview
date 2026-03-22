@@ -6,6 +6,9 @@ on:
       - "v*"          # v1.0.0 のようなタグをプッシュしたときにビルド＆リリース作成
   workflow_dispatch:   # GitHub UI から手動実行（ビルドのみ・リリース作成なし）
 
+permissions:
+  contents: write   # GitHub Release の作成・ファイルアップロードに必要
+
 jobs:
   build:
     strategy:
